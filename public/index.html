@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Floor Book — Machine Scheduler</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --card:#ffffff; --card-2:#f5f5f7; --line:rgba(0,0,0,.08); --line-strong:rgba(0,0,0,.12);
+    --text:#1d1d1f; --muted:#6e6e73; --accent:#0071e3; --accent-ink:#ffffff;
+    --press50:#0071e3; --press10:#30b0c7; --orbital:#ff9f0a; --danger:#ff3b30; --ok:#30d158;
+    --radius-lg:20px; --radius-md:14px; --radius-sm:10px; --radius-pill:999px;
+    --sans:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Inter, Arial, sans-serif;
+    --mono:"SF Mono", ui-monospace, "Roboto Mono", monospace;
+    --shadow-1:0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.04);
+    --shadow-2:0 8px 30px rgba(0,0,0,.10);
+    --header-bg:rgba(245,245,247,.78);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#000000; --card:#1c1c1e; --card-2:#151517; --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.16);
+      --text:#f5f5f7; --muted:#98989d; --accent:#0a84ff; --accent-ink:#ffffff;
+      --shadow-1:0 1px 2px rgba(0,0,0,.5), 0 1px 8px rgba(0,0,0,.35);
+      --shadow-2:0 10px 34px rgba(0,0,0,.55);
+      --header-bg:rgba(0,0,0,.65);
+    }
+  }
+  :root[data-theme="dark"]{ --bg:#000; --card:#1c1c1e; --card-2:#151517; --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.16); --text:#f5f5f7; --muted:#98989d; --accent:#0a84ff; --header-bg:rgba(0,0,0,.65); }
+
+  *{box-sizing:border-box;}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+    padding-bottom:env(safe-area-inset-bottom,0px); -webkit-font-smoothing:antialiased;
+    letter-spacing:-0.011em;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:0 20px 70px;}
+
+  header.top{
+    position:sticky; top:0; z-index:15; padding-top:env(safe-area-inset-top,0px);
+    background:var(--header-bg); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
+    border-bottom:1px solid var(--line); margin-bottom:34px;
+  }
+  header.top .inner{
+    max-width:1120px; margin:0 auto; padding:16px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  header.top h1{ font-size:21px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  header.top .clock{font-family:var(--mono); color:var(--muted); font-size:12.5px; text-align:right; line-height:1.3;}
+  .clock b{color:var(--text); font-size:15px; font-weight:600; display:block; font-family:var(--sans);}
+
+  section{margin-bottom:36px;}
+  .section-title{font-size:22px; font-weight:600; margin:0 0 14px; display:flex; align-items:baseline; gap:8px; letter-spacing:-.015em;}
+  .section-title .n{color:var(--muted); font-size:14px; font-weight:400;}
+
+  .fleet{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px;}
+  .m-card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px;
+    cursor:pointer; box-shadow:var(--shadow-1); transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .m-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow-2); }
+  .m-card:active{ transform:translateY(0) scale(.99); }
+  .m-card .id{font-family:var(--mono); font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  .m-card .nm{font-size:17px; font-weight:600; margin:3px 0 12px; letter-spacing:-.01em;}
+  .m-card .nm .tag{color:var(--muted); font-size:13px; font-weight:500;}
+  .m-card .stat{font-size:13px; font-weight:500; display:flex; align-items:center; gap:7px;}
+  .dot{width:8px; height:8px; border-radius:50%; flex:none; box-shadow:0 0 0 3px transparent;}
+  .dot.free{background:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent);}
+  .dot.busy{background:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);}
+  .m-card .stat-sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
+
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow-1);}
+
+  .day-nav{display:flex; align-items:center; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+  .day-nav button{background:var(--card-2); border:1px solid var(--line); color:var(--text); padding:8px 14px; border-radius:var(--radius-pill); cursor:pointer; font-family:var(--sans); font-size:13.5px; font-weight:500; transition:background .15s;}
+  .day-nav button:hover{background:var(--line);}
+  .day-nav input[type=date]{background:var(--card-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:var(--radius-pill); font-family:var(--sans); font-size:13.5px;}
+  .day-nav .lbl{font-size:17px; font-weight:600; margin-right:auto; letter-spacing:-.01em;}
+
+  .timeline{overflow-x:auto; padding-bottom:4px;}
+  .tl-inner{min-width:760px;}
+  .tl-hours{display:flex; margin-left:150px; padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid var(--line);}
+  .tl-hours span{flex:1; font-family:var(--mono); font-size:10.5px; color:var(--muted);}
+  .tl-row{display:flex; align-items:stretch; margin-bottom:8px;}
+  .tl-label{width:150px; flex:none; padding-right:12px; display:flex; flex-direction:column; justify-content:center;}
+  .tl-label .nm{font-size:13px; font-weight:600; line-height:1.25;}
+  .tl-label .id{font-family:var(--mono); font-size:10px; color:var(--muted);}
+  .tl-track{position:relative; flex:1; height:46px; background:repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px calc(100%/12)); background-size:calc(100%/12) 100%; background-color:var(--card-2); border-radius:var(--radius-sm);}
+  .blk{position:absolute; top:5px; bottom:5px; background:var(--c); color:#fff; border-radius:8px; padding:5px 9px; font-size:11.5px; line-height:1.25; overflow:hidden; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.18); transition:filter .15s;}
+  .blk b{display:block; font-size:12px; font-weight:600;}
+  .blk:hover{filter:brightness(1.1);}
+
+  .book-btn{background:var(--accent); color:var(--accent-ink); border:none; padding:11px 20px; border-radius:var(--radius-pill); font-family:var(--sans); font-size:14.5px; font-weight:600; cursor:pointer; transition:filter .15s, transform .1s;}
+  .book-btn:hover{filter:brightness(1.08);}
+  .book-btn:active{transform:scale(.97);}
+
+  .list{display:flex; flex-direction:column; gap:8px;}
+  .row{display:grid; grid-template-columns:110px 1fr 150px 80px auto; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:var(--radius-md); padding:13px 16px; font-size:13.5px; box-shadow:var(--shadow-1);}
+  .row .t{font-family:var(--mono); color:var(--muted); font-size:12.5px;}
+  .row .job{font-weight:600;}
+  .row .op{color:var(--muted); font-size:12.5px;}
+  .row .qty{font-family:var(--mono);}
+  .row .act{display:flex; justify-content:flex-end;}
+  .row .act button{background:var(--card-2); border:1px solid var(--line); color:var(--muted); border-radius:var(--radius-pill); padding:6px 12px; font-size:12px; font-weight:500; cursor:pointer; margin-left:6px; transition:background .15s,color .15s;}
+  .row .act button:hover{background:var(--line); color:var(--text);}
+  .row .act button[data-act="del"]:hover{color:var(--danger);}
+  .empty{color:var(--muted); font-size:14px; padding:20px; text-align:center; background:var(--card); border:1px dashed var(--line-strong); border-radius:var(--radius-md);}
+
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.45); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:20; padding:16px;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:26px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-2); position:relative; animation:pop .18s ease;}
+  @keyframes pop{ from{opacity:0; transform:scale(.96);} to{opacity:1; transform:scale(1);} }
+  .modal h3{font-size:20px; font-weight:600; margin:0 0 18px; letter-spacing:-.01em;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:600;}
+  .field input, .field select{width:100%; background:var(--card-2); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:var(--radius-sm); font-family:var(--sans); font-size:14.5px; transition:border-color .15s;}
+  .field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
+  .field.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .modal-actions{display:flex; justify-content:space-between; align-items:center; margin-top:20px; gap:10px;}
+  .err{color:var(--danger); font-size:12.5px; margin-top:6px; min-height:16px; font-weight:500;}
+  .close-x{position:absolute; top:16px; right:16px; background:var(--card-2); border:none; color:var(--muted); font-size:16px; width:28px; height:28px; border-radius:50%; cursor:pointer; line-height:1;}
+  .del-link{background:none; border:none; color:var(--danger); font-size:13px; font-weight:500; cursor:pointer;}
+  .toast{position:fixed; bottom:calc(24px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%); background:rgba(29,29,31,.92); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); color:#fff; padding:13px 20px; border-radius:var(--radius-pill); font-size:13.5px; font-weight:500; box-shadow:var(--shadow-2); z-index:30; max-width:90vw; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.bad{background:rgba(255,59,48,.95);}
+</style>
+</head>
+<body>
+<header class="top"><div class="inner">
+  <h1>Floor Book</h1>
+  <div class="clock" id="clock"><b id="clockTime">--:--</b><span id="clockDate">—</span></div>
+</div></header>
+<div class="wrap">
+
+  <section>
+    <div class="section-title">Machines <span class="n">5 units</span></div>
+    <div class="fleet" id="fleet"></div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <div class="day-nav">
+        <span class="lbl" id="dayLabel">Today</span>
+        <button id="prevDay">&larr; Prev</button>
+        <input type="date" id="dayPick">
+        <button id="nextDay">Next &rarr;</button>
+        <button class="book-btn" id="openBook" style="margin-left:auto;">+ New booking</button>
+      </div>
+      <div class="section-title" style="font-size:16px; margin-bottom:12px;">Schedule <span class="n">08:00 – 20:00</span></div>
+      <div class="timeline"><div class="tl-inner">
+        <div class="tl-hours" id="tlHours"></div>
+        <div id="tlRows"></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">Bookings on this day <span class="n" id="listCount">0</span></div>
+    <div class="list" id="list"></div>
+  </section>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <button class="close-x" id="closeModal">&times;</button>
+    <h3 id="modalTitle">New booking</h3>
+    <input type="hidden" id="editId">
+    <div class="field">
+      <label>Machine</label>
+      <select id="fMachine"></select>
+    </div>
+    <div class="field row2">
+      <div><label>Date</label><input type="date" id="fDate"></div>
+      <div><label>Quantity (pcs)</label><input type="number" id="fQty" min="1" placeholder="e.g. 500"></div>
+    </div>
+    <div class="field row2">
+      <div><label>Start time</label><input type="time" id="fStart"></div>
+      <div><label>End time</label><input type="time" id="fEnd"></div>
+    </div>
+    <div class="field">
+      <label>Job / part no.</label>
+      <input type="text" id="fJob" placeholder="e.g. Bracket-204 / PO-3311">
+    </div>
+    <div class="field row2">
+      <div><label>Operator</label><input type="text" id="fOp" placeholder="Operator name"></div>
+      <div><label>Operator email</label><input type="email" id="fOpEmail" placeholder="name@company.com"></div>
+    </div>
+    <div class="field">
+      <label>Operator WhatsApp (with country code)</label>
+      <input type="text" id="fOpWhatsapp" placeholder="+91 98765 43210">
+    </div>
+    <div class="err" id="fErr"></div>
+    <div class="notice" id="fNotice" style="font-size:12px;color:var(--muted);min-height:16px;"></div>
+    <div class="modal-actions">
+      <span id="delWrap"></span>
+      <button class="book-btn" id="saveBooking">Save & notify</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let MACHINES = [];
+const M_COLOR = {'PP50-1':'var(--press50)', 'PP10-1':'var(--press10)', 'PP10-2':'var(--press10)', 'PP10-3':'var(--press10)', 'OR-1':'var(--orbital)'};
+const DAY_START=8, DAY_END=20; // 08:00–20:00
+
+let bookings = [];
+async function loadBookings(){ const r = await fetch('/api/bookings'); bookings = await r.json(); }
+async function loadMachines(){ const r = await fetch('/api/machines'); MACHINES = await r.json(); }
+
+function pad(n){return n.toString().padStart(2,'0');}
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+
+let currentDate = todayStr();
+document.getElementById('dayPick').value = currentDate;
+
+function dayLabelText(dstr){
+  const d = new Date(dstr+'T00:00:00');
+  const today = todayStr();
+  const opts={weekday:'long', month:'short', day:'numeric'};
+  let base = d.toLocaleDateString(undefined, opts);
+  if(dstr===today) return 'Today · '+base;
+  return base;
+}
+
+function renderFleet(){
+  const fleet = document.getElementById('fleet');
+  const nowStr = todayStr();
+  const nowMin = new Date().getHours()*60+new Date().getMinutes();
+  fleet.innerHTML = MACHINES.map(m=>{
+    const active = bookings.find(b=>b.machine===m.id && b.date===nowStr && toMin(b.start)<=nowMin && nowMin<toMin(b.end));
+    const status = active ? `<div class="stat"><span class="dot busy"></span>In use — until ${active.end}</div><div class="stat-sub">${escapeHtml(active.job)}</div>`
+                           : `<div class="stat"><span class="dot free"></span>Free now</div><div class="stat-sub">Tap to book</div>`;
+    return `<div class="m-card" style="--c:${M_COLOR[m.id]||'var(--accent)'}" data-machine="${m.id}">
+      <div class="id">${m.id}</div>
+      <div class="nm">${m.name} <span class="tag">${m.tag}</span></div>
+      ${status}
+    </div>`;
+  }).join('');
+  fleet.querySelectorAll('.m-card').forEach(el=>{
+    el.addEventListener('click', ()=>openModal(null, el.dataset.machine));
+  });
+}
+
+function renderTimeline(){
+  const hours = document.getElementById('tlHours');
+  hours.innerHTML='';
+  for(let h=DAY_START; h<DAY_END; h++){ hours.innerHTML += `<span>${pad(h)}:00</span>`; }
+  const rows = document.getElementById('tlRows');
+  rows.innerHTML = MACHINES.map(m=>{
+    const dayBookings = bookings.filter(b=>b.machine===m.id && b.date===currentDate);
+    const blocks = dayBookings.map(b=>{
+      const s=Math.max(toMin(b.start), DAY_START*60), e=Math.min(toMin(b.end), DAY_END*60);
+      const span=DAY_END*60-DAY_START*60;
+      const left=((s-DAY_START*60)/span*100).toFixed(2);
+      const width=Math.max(((e-s)/span*100),1.5).toFixed(2);
+      return `<div class="blk" style="--c:${M_COLOR[m.id]||'var(--accent)'}; left:${left}%; width:${width}%;" data-id="${b.id}">
+        <b>${escapeHtml(b.job)}</b>${b.start}–${b.end}
+      </div>`;
+    }).join('');
+    return `<div class="tl-row">
+      <div class="tl-label"><div class="nm">${m.name}</div><div class="id">${m.id} · ${m.tag}</div></div>
+      <div class="tl-track">${blocks}</div>
+    </div>`;
+  }).join('');
+  rows.querySelectorAll('.blk').forEach(el=>{
+    el.addEventListener('click', ()=>{ const b=bookings.find(x=>x.id===el.dataset.id); if(b) openModal(b); });
+  });
+}
+
+function renderList(){
+  const list = document.getElementById('list');
+  const dayBookings = bookings.filter(b=>b.date===currentDate).sort((a,b)=>toMin(a.start)-toMin(b.start));
+  document.getElementById('listCount').textContent = dayBookings.length;
+  if(!dayBookings.length){ list.innerHTML = `<div class="empty">Nothing booked for this day yet.</div>`; return; }
+  list.innerHTML = dayBookings.map(b=>{
+    const m = MACHINES.find(x=>x.id===b.machine);
+    return `<div class="row">
+      <div class="t">${b.start}–${b.end}</div>
+      <div><div class="job">${escapeHtml(b.job)}</div><div class="op">${escapeHtml(m?m.name:b.machine)} · ${escapeHtml(b.operator||'—')}</div></div>
+      <div class="op">${escapeHtml(b.machine)}</div>
+      <div class="qty">${b.qty?b.qty+' pc':'—'}</div>
+      <div class="act">
+        <a class="cal-link" href="/api/bookings/${b.id}/ics" title="Add to calendar" style="text-decoration:none;"><button type="button">Calendar</button></a>
+        <button data-id="${b.id}" data-act="resend" title="Resend email">Resend</button>
+        <button data-id="${b.id}" data-act="edit">Edit</button><button data-id="${b.id}" data-act="del">Cancel</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      if(btn.dataset.act==='edit'){ openModal(bookings.find(x=>x.id===id)); }
+      else if(btn.dataset.act==='resend'){
+        const r = await fetch(`/api/bookings/${id}/notify`, {method:'POST'});
+        const data = await r.json();
+        if(data.notify){ const s=summarizeNotify(data.notify); showToast(s.msg, s.bad); }
+        else showToast('Could not resend.', true);
+      } else if(btn.dataset.act==='del'){
+        await fetch(`/api/bookings/${id}`, {method:'DELETE'});
+        await refresh();
+      }
+    });
+  });
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function showToast(msg, bad){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.toggle('bad', !!bad); t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove('show'), 5000);
+}
+
+function summarizeNotify(n){
+  const parts = [];
+  if(n.email && n.email.sent) parts.push('email');
+  if(n.whatsapp && n.whatsapp.sent) parts.push('WhatsApp');
+  if(parts.length) return { msg: 'Booked — sent via ' + parts.join(' & ') + '.', bad:false };
+  return { msg: 'Booked. Email/WhatsApp did not send (check server config).', bad:true };
+}
+
+async function refresh(){ await loadBookings(); renderAll(); }
+function renderAll(){ renderFleet(); renderTimeline(); renderList(); document.getElementById('dayLabel').textContent = dayLabelText(currentDate); }
+
+// day nav
+document.getElementById('dayPick').addEventListener('change', e=>{ currentDate=e.target.value; renderAll(); });
+document.getElementById('prevDay').addEventListener('click', ()=>{ const d=new Date(currentDate+'T00:00:00'); d.setDate(d.getDate()-1); currentDate=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); document.getElementById('dayPick').value=currentDate; renderAll(); });
+document.getElementById('nextDay').addEventListener('click', ()=>{ const d=new Date(currentDate+'T00:00:00'); d.setDate(d.getDate()+1); currentDate=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); document.getElementById('dayPick').value=currentDate; renderAll(); });
+
+// modal
+const modalBg = document.getElementById('modalBg');
+const fMachine = document.getElementById('fMachine');
+
+function openModal(booking, presetMachine){
+  document.getElementById('fErr').textContent='';
+  document.getElementById('modalTitle').textContent = booking ? 'Edit booking' : 'New booking';
+  document.getElementById('editId').value = booking ? booking.id : '';
+  fMachine.value = booking ? booking.machine : (presetMachine || (MACHINES[0]&&MACHINES[0].id));
+  document.getElementById('fDate').value = booking ? booking.date : currentDate;
+  document.getElementById('fStart').value = booking ? booking.start : '09:00';
+  document.getElementById('fEnd').value = booking ? booking.end : '10:00';
+  document.getElementById('fQty').value = booking ? (booking.qty||'') : '';
+  document.getElementById('fJob').value = booking ? booking.job : '';
+  document.getElementById('fOp').value = booking ? booking.operator : '';
+  document.getElementById('fOpEmail').value = booking ? (booking.opEmail||'') : '';
+  document.getElementById('fOpWhatsapp').value = booking ? (booking.opWhatsapp||'') : '';
+  document.getElementById('fNotice').textContent = 'Booking an operator email sends a Gmail confirmation with a calendar invite attached.';
+  const delWrap = document.getElementById('delWrap');
+  delWrap.innerHTML = booking ? `<button class="del-link" id="delBtn">Delete booking</button>` : '';
+  if(booking){ document.getElementById('delBtn').addEventListener('click', async ()=>{
+    await fetch(`/api/bookings/${booking.id}`, {method:'DELETE'}); closeModal(); await refresh();
+  }); }
+  modalBg.classList.add('open');
+}
+function closeModal(){ modalBg.classList.remove('open'); }
+document.getElementById('closeModal').addEventListener('click', closeModal);
+document.getElementById('openBook').addEventListener('click', ()=>openModal(null));
+modalBg.addEventListener('click', e=>{ if(e.target===modalBg) closeModal(); });
+
+document.getElementById('saveBooking').addEventListener('click', async ()=>{
+  const id = document.getElementById('editId').value;
+  const machine = fMachine.value;
+  const date = document.getElementById('fDate').value;
+  const start = document.getElementById('fStart').value;
+  const end = document.getElementById('fEnd').value;
+  const qty = document.getElementById('fQty').value;
+  const job = document.getElementById('fJob').value.trim();
+  const operator = document.getElementById('fOp').value.trim();
+  const opEmail = document.getElementById('fOpEmail').value.trim();
+  const opWhatsapp = document.getElementById('fOpWhatsapp').value.trim();
+  const errEl = document.getElementById('fErr');
+
+  if(!date || !start || !end || !job){ errEl.textContent='Fill in date, time and job / part no.'; return; }
+
+  const payload = {machine, date, start, end, qty, job, operator, opEmail, opWhatsapp};
+  const url = id ? `/api/bookings/${id}` : '/api/bookings';
+  const method = id ? 'PUT' : 'POST';
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  const data = await r.json();
+  if(!r.ok){ errEl.textContent = data.error || 'Could not save booking.'; return; }
+
+  currentDate = date; document.getElementById('dayPick').value = date;
+  closeModal(); await refresh();
+  if(data.notify){
+    const s = summarizeNotify(data.notify);
+    showToast(s.msg, s.bad);
+  }
+});
+
+// clock
+function tickClock(){
+  const d = new Date();
+  document.getElementById('clockTime').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
+  document.getElementById('clockDate').textContent = d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'});
+}
+tickClock(); setInterval(tickClock, 15000);
+setInterval(refresh, 15000);
+
+(async function init(){
+  await loadMachines();
+  fMachine.innerHTML = MACHINES.map(m=>`<option value="${m.id}">${m.name} (${m.tag}) — ${m.id}</option>`).join('');
+  await refresh();
+})();
+</script>
+</body>
+</html>
