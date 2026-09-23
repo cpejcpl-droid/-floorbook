@@ -73,19 +73,24 @@ function buildICS(b, machineName) {
 
 async function sendWhatsApp(b, machineName) {
   if (!twilioClient) return { sent: false, reason: 'not_configured' };
-  const to = b.opWhatsapp ? 'whatsapp:' + b.opWhatsapp.replace(/[^0-9+]/g, '') : SUPERVISOR_WHATSAPP;
-  if (!to) return { sent: false, reason: 'no_recipient' };
-  const body = `*Floor Book — machine booked*\n\n${machineName} (${b.machine})\nDate: ${b.date}\nTime: ${b.start}–${b.end}\nJob: ${b.job}\nOperator: ${b.operator || '-'}\nQty: ${b.qty || '-'} pcs`;
-  try {
-    await twilioClient.messages.create({ from: TWILIO_WHATSAPP_FROM, to, body });
-    if (b.opWhatsapp && SUPERVISOR_WHATSAPP && SUPERVISOR_WHATSAPP !== to) {
-      await twilioClient.messages.create({ from: TWILIO_WHATSAPP_FROM, to: SUPERVISOR_WHATSAPP, body });
+  const norm = (p) => p ? 'whatsapp:' + p.replace(/[^0-9+]/g, '') : null;
+  const recipients = new Set([
+    norm(b.opWhatsapp),
+    norm(b.bookedByWhatsapp),
+    SUPERVISOR_WHATSAPP || null,
+  ].filter(Boolean));
+  if (recipients.size === 0) return { sent: false, reason: 'no_recipient' };
+  const body = `*Floor Book — machine booked*\n\n${machineName} (${b.machine})\nDate: ${b.date}\nTime: ${b.start}–${b.end}\nJob: ${b.job}\nOperator: ${b.operator || '-'}\nBooked by: ${b.bookedBy || '-'}\nQty: ${b.qty || '-'} pcs`;
+  let anySent = false;
+  for (const to of recipients) {
+    try {
+      await twilioClient.messages.create({ from: TWILIO_WHATSAPP_FROM, to, body });
+      anySent = true;
+    } catch (e) {
+      console.error(`[floorbook] WhatsApp send to ${to} failed:`, e.message);
     }
-    return { sent: true };
-  } catch (e) {
-    console.error('[floorbook] WhatsApp send failed:', e.message);
-    return { sent: false, reason: 'send_error' };
   }
+  return anySent ? { sent: true } : { sent: false, reason: 'send_error' };
 }
 
 async function notify(b) {
@@ -135,7 +140,7 @@ app.post('/api/bookings', async (req, res) => {
   if (conflict) {
     return res.status(409).json({ error: `Clash with "${conflict.job}" (${conflict.start}–${conflict.end}) on this machine.` });
   }
-  const record = { id: 'b' + Date.now(), machine: b.machine, date: b.date, start: b.start, end: b.end, qty: b.qty || '', job: b.job, operator: b.operator || '', opEmail: b.opEmail || '', opWhatsapp: b.opWhatsapp || '' };
+  const record = { id: 'b' + Date.now(), machine: b.machine, date: b.date, start: b.start, end: b.end, qty: b.qty || '', job: b.job, operator: b.operator || '', opEmail: b.opEmail || '', opWhatsapp: b.opWhatsapp || '', bookedBy: b.bookedBy || '', bookedByWhatsapp: b.bookedByWhatsapp || '' };
   list.push(record);
   writeBookings(list);
   const result = await notify(record);

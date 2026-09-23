@@ -190,6 +190,10 @@
       <label>Operator WhatsApp (with country code)</label>
       <input type="text" id="fOpWhatsapp" placeholder="+91 98765 43210">
     </div>
+    <div class="field row2">
+      <div><label>Booked by (your name)</label><input type="text" id="fBookedBy" placeholder="Your name"></div>
+      <div><label>Your WhatsApp</label><input type="text" id="fBookedByWhatsapp" placeholder="+91 98765 43210"></div>
+    </div>
     <div class="err" id="fErr"></div>
     <div class="notice" id="fNotice" style="font-size:12px;color:var(--muted);min-height:16px;"></div>
     <div class="modal-actions">
@@ -280,7 +284,7 @@ function renderList(){
     const m = MACHINES.find(x=>x.id===b.machine);
     return `<div class="row">
       <div class="t">${b.start}–${b.end}</div>
-      <div><div class="job">${escapeHtml(b.job)}</div><div class="op">${escapeHtml(m?m.name:b.machine)} · ${escapeHtml(b.operator||'—')}</div></div>
+      <div><div class="job">${escapeHtml(b.job)}</div><div class="op">${escapeHtml(m?m.name:b.machine)} · ${escapeHtml(b.operator||'—')}</div><div class="op">Booked by ${escapeHtml(b.bookedBy||'—')}</div></div>
       <div class="op">${escapeHtml(b.machine)}</div>
       <div class="qty">${b.qty?b.qty+' pc':'—'}</div>
       <div class="act">
@@ -349,6 +353,8 @@ function openModal(booking, presetMachine){
   document.getElementById('fOp').value = booking ? booking.operator : '';
   document.getElementById('fOpEmail').value = booking ? (booking.opEmail||'') : '';
   document.getElementById('fOpWhatsapp').value = booking ? (booking.opWhatsapp||'') : '';
+  document.getElementById('fBookedBy').value = booking ? (booking.bookedBy||'') : '';
+  document.getElementById('fBookedByWhatsapp').value = booking ? (booking.bookedByWhatsapp||'') : '';
   document.getElementById('fNotice').textContent = 'Booking an operator email sends a Gmail confirmation with a calendar invite attached.';
   const delWrap = document.getElementById('delWrap');
   delWrap.innerHTML = booking ? `<button class="del-link" id="delBtn">Delete booking</button>` : '';
@@ -373,11 +379,13 @@ document.getElementById('saveBooking').addEventListener('click', async ()=>{
   const operator = document.getElementById('fOp').value.trim();
   const opEmail = document.getElementById('fOpEmail').value.trim();
   const opWhatsapp = document.getElementById('fOpWhatsapp').value.trim();
+  const bookedBy = document.getElementById('fBookedBy').value.trim();
+  const bookedByWhatsapp = document.getElementById('fBookedByWhatsapp').value.trim();
   const errEl = document.getElementById('fErr');
 
   if(!date || !start || !end || !job){ errEl.textContent='Fill in date, time and job / part no.'; return; }
 
-  const payload = {machine, date, start, end, qty, job, operator, opEmail, opWhatsapp};
+  const payload = {machine, date, start, end, qty, job, operator, opEmail, opWhatsapp, bookedBy, bookedByWhatsapp};
   const url = id ? `/api/bookings/${id}` : '/api/bookings';
   const method = id ? 'PUT' : 'POST';
   const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
