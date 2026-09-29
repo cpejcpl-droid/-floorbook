@@ -36,27 +36,32 @@ Gmail blocks your normal password for apps like this — you need an
 If you skip this, the app still works fully — it just won't send emails
 (you'll see a warning in the server log, and bookings save normally).
 
-## 3. WhatsApp setup (via Twilio)
+## 3. Telegram setup (free, no phone verification needed)
 
-WhatsApp messages need a Twilio account:
+Telegram bots send free instant messages and don't require verifying a
+business phone number — only a normal Telegram account is needed (which
+you likely already have).
 
-1. Sign up free at https://www.twilio.com/try-twilio
-2. Go to **Messaging → Try it out → Send a WhatsApp message** to activate
-   the free Sandbox (instant, no approval needed for testing). It gives you
-   a number like `whatsapp:+14155238886`.
-3. Each phone that should receive messages (operators, supervisor) must
-   send the sandbox's join code (e.g. "join happy-tiger") to that WhatsApp
-   number once, from WhatsApp — this is a one-time Twilio sandbox
-   requirement for testing.
-4. Copy your **Account SID** and **Auth Token** from the Twilio console
-   into `.env`, along with `TWILIO_WHATSAPP_FROM` and `SUPERVISOR_WHATSAPP`.
+1. Open Telegram, search for **@BotFather**, and start a chat with it.
+2. Send `/newbot`, give it a name and a username (must end in "bot",
+   e.g. `floorbook_notify_bot`).
+3. BotFather replies with a **token** like
+   `123456789:ABCdefGhIJKlmNoPQRstuVWXyz` — copy this into `.env` as
+   `TELEGRAM_BOT_TOKEN`.
+4. Each person who should get notifications (operators, supervisor) needs
+   their own **Telegram numeric ID**. The easiest way: have them message
+   **@userinfobot** on Telegram — it instantly replies with their ID.
+5. Put the supervisor's ID into `.env` as `SUPERVISOR_TELEGRAM_ID`.
+6. In the app, each booking has fields for the operator's and the form
+   filler's Telegram ID — fill those in per booking to notify them
+   directly.
+7. **Important:** a bot can't message someone until that person has sent
+   the bot at least one message first (a Telegram anti-spam rule). Have
+   everyone who should get notified open your bot (search its username in
+   Telegram) and send it anything, e.g. "hi", once.
 
-For real production use (not just testing) beyond the sandbox, you'll need
-to apply for **WhatsApp Business API access** through Twilio, which
-involves Meta's business verification — the sandbox is fine to get started
-and test the whole flow first.
+If you skip this, Telegram messages just won't send — email still works.
 
-If you skip this, WhatsApp messages just won't send — email still works.
 
 ## 4. Put it on the internet (so anyone can use it from their phone/PC)
 
@@ -71,8 +76,8 @@ unless you swap the JSON file for a hosted database.
 2. Go to https://render.com → **New +** → **Web Service** → connect the repo.
 3. Build command: `npm install` — Start command: `npm start`
 4. Add environment variables (from your `.env`): `GMAIL_USER`,
-   `GMAIL_APP_PASSWORD`, `SUPERVISOR_EMAIL`, `TWILIO_ACCOUNT_SID`,
-   `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `SUPERVISOR_WHATSAPP`.
+   `GMAIL_APP_PASSWORD`, `SUPERVISOR_EMAIL`, `TELEGRAM_BOT_TOKEN`,
+   `SUPERVISOR_TELEGRAM_ID`.
 5. Under **Disks**, add a small persistent disk mounted at `/data` so
    bookings survive restarts, and change `DATA_FILE` in `server.js`
    to `/data/bookings.json` (one line change) before deploying.
