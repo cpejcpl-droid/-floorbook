@@ -3,7 +3,6 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const twilio = require('twilio');
 
 const app = express();
 app.use(express.json());
@@ -35,16 +34,11 @@ if (GMAIL_USER && GMAIL_APP_PASSWORD) {
   console.warn('[floorbook] GMAIL_USER / GMAIL_APP_PASSWORD not set — email notifications are disabled.');
 }
 
-const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM; // e.g. whatsapp:+14155238886
-const SUPERVISOR_WHATSAPP = process.env.SUPERVISOR_WHATSAPP || ''; // e.g. whatsapp:+919876543210
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const SUPERVISOR_TELEGRAM_ID = process.env.SUPERVISOR_TELEGRAM_ID || '';
 
-let twilioClient = null;
-if (TWILIO_SID && TWILIO_TOKEN && TWILIO_WHATSAPP_FROM) {
-  twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
-} else {
-  console.warn('[floorbook] Twilio env vars not set — WhatsApp notifications are disabled.');
+if (!TELEGRAM_BOT_TOKEN) {
+  console.warn('[floorbook] TELEGRAM_BOT_TOKEN not set — Telegram notifications are disabled.');
 }
 
 function readBookings() {
@@ -71,23 +65,24 @@ function buildICS(b, machineName) {
   ].join('\r\n');
 }
 
-async function sendWhatsApp(b, machineName) {
-  if (!twilioClient) return { sent: false, reason: 'not_configured' };
-  const norm = (p) => p ? 'whatsapp:' + p.replace(/[^0-9+]/g, '') : null;
-  const recipients = new Set([
-    norm(b.opWhatsapp),
-    norm(b.bookedByWhatsapp),
-    SUPERVISOR_WHATSAPP || null,
-  ].filter(Boolean));
+async function sendTelegram(b, machineName) {
+  if (!TELEGRAM_BOT_TOKEN) return { sent: false, reason: 'not_configured' };
+  const recipients = new Set([b.opTelegramId, b.bookedByTelegramId, SUPERVISOR_TELEGRAM_ID].filter(Boolean));
   if (recipients.size === 0) return { sent: false, reason: 'no_recipient' };
-  const body = `*Floor Book — machine booked*\n\n${machineName} (${b.machine})\nDate: ${b.date}\nTime: ${b.start}–${b.end}\nJob: ${b.job}\nOperator: ${b.operator || '-'}\nBooked by: ${b.bookedBy || '-'}\nQty: ${b.qty || '-'} pcs`;
+  const text = `*Floor Book — machine booked*\n\n${machineName} (${b.machine})\nDate: ${b.date}\nTime: ${b.start}–${b.end}\nJob: ${b.job}\nOperator: ${b.operator || '-'}\nBooked by: ${b.bookedBy || '-'}\nQty: ${b.qty || '-'} pcs`;
   let anySent = false;
-  for (const to of recipients) {
+  for (const chat_id of recipients) {
     try {
-      await twilioClient.messages.create({ from: TWILIO_WHATSAPP_FROM, to, body });
-      anySent = true;
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id, text, parse_mode: 'Markdown' }),
+      });
+      const data = await res.json();
+      if (data.ok) anySent = true;
+      else console.error(`[floorbook] Telegram send to ${chat_id} failed:`, data.description);
     } catch (e) {
-      console.error(`[floorbook] WhatsApp send to ${to} failed:`, e.message);
+      console.error(`[floorbook] Telegram send to ${chat_id} failed:`, e.message);
     }
   }
   return anySent ? { sent: true } : { sent: false, reason: 'send_error' };
@@ -97,8 +92,8 @@ async function notify(b) {
   const machine = MACHINES.find(m => m.id === b.machine);
   const machineName = machine ? machine.name : b.machine;
   const email = await sendEmail(b, machineName);
-  const whatsapp = await sendWhatsApp(b, machineName);
-  return { email, whatsapp };
+  const telegram = await sendTelegram(b, machineName);
+  return { email, telegram };
 }
 
 async function sendEmail(b, machineName) {
@@ -140,7 +135,7 @@ app.post('/api/bookings', async (req, res) => {
   if (conflict) {
     return res.status(409).json({ error: `Clash with "${conflict.job}" (${conflict.start}–${conflict.end}) on this machine.` });
   }
-  const record = { id: 'b' + Date.now(), machine: b.machine, date: b.date, start: b.start, end: b.end, qty: b.qty || '', job: b.job, operator: b.operator || '', opEmail: b.opEmail || '', opWhatsapp: b.opWhatsapp || '', bookedBy: b.bookedBy || '', bookedByWhatsapp: b.bookedByWhatsapp || '' };
+  const record = { id: 'b' + Date.now(), machine: b.machine, date: b.date, start: b.start, end: b.end, qty: b.qty || '', job: b.job, operator: b.operator || '', opEmail: b.opEmail || '', opTelegramId: b.opTelegramId || '', bookedBy: b.bookedBy || '', bookedByTelegramId: b.bookedByTelegramId || '' };
   list.push(record);
   writeBookings(list);
   const result = await notify(record);
